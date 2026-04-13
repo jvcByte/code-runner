@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,11 +53,14 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
+			slog.Warn("execution failed", "exit_code", exitCode, "stderr_preview", truncate(stderr.String(), 200))
 		} else if ctx.Err() == context.DeadlineExceeded {
 			exitCode = 124
 			stderr.WriteString("\nExecution timed out (10s limit)")
+			slog.Warn("execution timed out")
 		} else {
 			exitCode = 1
+			slog.Error("execution error", "error", err.Error())
 		}
 	}
 
@@ -85,4 +89,11 @@ func (lw *limitedWriter) Write(p []byte) (int, error) {
 	n, err := lw.w.Write(p)
 	lw.n += n
 	return n, err
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
