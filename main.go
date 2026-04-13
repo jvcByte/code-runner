@@ -38,6 +38,19 @@ func runHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate API key if configured
+	apiKey := os.Getenv("RUNNER_API_KEY")
+	if apiKey != "" {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer "+apiKey {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+
 	var req RunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
