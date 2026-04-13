@@ -83,15 +83,13 @@ const indexHTML = `<!DOCTYPE html>
 <body>
   <div class="card">
     <div class="logo">
-      <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="16,2 28,9 28,23 16,30 4,23 4,9"
-          stroke="#818cf8" stroke-width="2" stroke-linejoin="round" fill="none"/>
-      </svg>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="2" width="20" height="8" rx="2"/>
-        <rect x="2" y="14" width="20" height="8" rx="2"/>
-        <line x1="6" y1="6" x2="6.01" y2="6"/>
-        <line x1="6" y1="18" x2="6.01" y2="18"/>
+      <svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="24" height="10" rx="2" stroke="#818cf8" stroke-width="2" fill="#0c0f14"/>
+        <rect x="4" y="18" width="24" height="10" rx="2" stroke="#818cf8" stroke-width="2" fill="#0c0f14"/>
+        <circle cx="9" cy="9" r="1.5" fill="#10b981"/>
+        <circle cx="9" cy="23" r="1.5" fill="#10b981"/>
+        <line x1="14" y1="9" x2="24" y2="9" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="14" y1="23" x2="24" y2="23" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     </div>
     <h1>Recoding Code Runner</h1>
