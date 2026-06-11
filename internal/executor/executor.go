@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	MaxCodeSize   = 64 * 1024
-	MaxOutputSize = 64 * 1024
-	Timeout       = 10 * time.Second
+	MaxCodeSize      = 64 * 1024
+	MaxOutputSize    = 64 * 1024
+	CompileTimeout   = 30 * time.Second
+	ExecutionTimeout = 10 * time.Second
 )
 
 type Result struct {
@@ -38,20 +39,20 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
-	defer cancel()
+	// Compile with a generous timeout — cold builds can be slow.
+	compileCtx, compileCancel := context.WithTimeout(context.Background(), CompileTimeout)
+	defer compileCancel()
 
-	// Compile first to avoid go module cache lock contention under concurrent load.
 	binPath := filepath.Join(dir, "runner-bin")
 	var compileStderr strings.Builder
-	compileCmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, codePath)
+	compileCmd := exec.CommandContext(compileCtx, "go", "build", "-o", binPath, codePath)
 	compileCmd.Dir = dir
 	compileCmd.Stderr = &limitedWriter{w: &compileStderr, limit: MaxOutputSize}
 	if err := compileCmd.Run(); err != nil {
 		exitCode := 1
-		if ctx.Err() == context.DeadlineExceeded {
+		if compileCtx.Err() == context.DeadlineExceeded {
 			exitCode = 124
-			compileStderr.WriteString("\nCompilation timed out (10s limit)")
+			compileStderr.WriteString("\nCompilation timed out (30s limit)")
 			slog.Warn("compilation timed out")
 		} else {
 			slog.Warn("execution failed", "exit_code", exitCode, "stderr_preview", truncate(compileStderr.String(), 200))
@@ -59,7 +60,11 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 		return &Result{Stderr: compileStderr.String(), ExitCode: exitCode}, nil
 	}
 
-	runCmd := exec.CommandContext(ctx, binPath)
+	// Run the compiled binary with the execution timeout.
+	runCtx, runCancel := context.WithTimeout(context.Background(), ExecutionTimeout)
+	defer runCancel()
+
+	runCmd := exec.CommandContext(runCtx, binPath)
 	runCmd.Stdin = strings.NewReader(stdin)
 	runCmd.Dir = dir
 
@@ -69,7 +74,7 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 
 	exitCode := 0
 	if err := runCmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if runCtx.Err() == context.DeadlineExceeded {
 			exitCode = 124
 			stderr.WriteString("\nExecution timed out (10s limit)")
 			slog.Warn("execution timed out")
