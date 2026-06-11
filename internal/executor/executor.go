@@ -47,6 +47,7 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 	var compileStderr strings.Builder
 	compileCmd := exec.CommandContext(compileCtx, "go", "build", "-o", binPath, codePath)
 	compileCmd.Dir = dir
+	compileCmd.Env = append(os.Environ(), "GOCACHE=/root/.cache/go-build")
 	compileCmd.Stderr = &limitedWriter{w: &compileStderr, limit: MaxOutputSize}
 	if err := compileCmd.Run(); err != nil {
 		exitCode := 1
