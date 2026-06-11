@@ -23,11 +23,20 @@ type Result struct {
 	ExitCode int
 }
 
-type Executor struct{}
+type Executor struct {
+	sem chan struct{}
+}
 
-func New() *Executor { return &Executor{} }
+// New creates an Executor that allows at most maxConcurrent simultaneous compilations.
+func New() *Executor {
+	return &Executor{sem: make(chan struct{}, 4)}
+}
 
 func (e *Executor) Run(code, stdin string) (*Result, error) {
+	// Limit concurrent compilations to avoid OOM on memory-constrained hosts (e.g. Render free 512MB).
+	e.sem <- struct{}{}
+	defer func() { <-e.sem }()
+
 	dir, err := os.MkdirTemp("", "runner-*")
 	if err != nil {
 		return nil, err
