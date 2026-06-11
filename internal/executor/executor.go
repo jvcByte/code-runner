@@ -41,23 +41,41 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "run", codePath)
-	cmd.Stdin = strings.NewReader(stdin)
-	cmd.Dir = dir
+	// Compile first to avoid go module cache lock contention under concurrent load.
+	binPath := filepath.Join(dir, "runner-bin")
+	var compileStderr strings.Builder
+	compileCmd := exec.CommandContext(ctx, "go", "build", "-o", binPath, codePath)
+	compileCmd.Dir = dir
+	compileCmd.Stderr = &limitedWriter{w: &compileStderr, limit: MaxOutputSize}
+	if err := compileCmd.Run(); err != nil {
+		exitCode := 1
+		if ctx.Err() == context.DeadlineExceeded {
+			exitCode = 124
+			compileStderr.WriteString("\nCompilation timed out (10s limit)")
+			slog.Warn("compilation timed out")
+		} else {
+			slog.Warn("execution failed", "exit_code", exitCode, "stderr_preview", truncate(compileStderr.String(), 200))
+		}
+		return &Result{Stderr: compileStderr.String(), ExitCode: exitCode}, nil
+	}
+
+	runCmd := exec.CommandContext(ctx, binPath)
+	runCmd.Stdin = strings.NewReader(stdin)
+	runCmd.Dir = dir
 
 	var stdout, stderr strings.Builder
-	cmd.Stdout = &limitedWriter{w: &stdout, limit: MaxOutputSize}
-	cmd.Stderr = &limitedWriter{w: &stderr, limit: MaxOutputSize}
+	runCmd.Stdout = &limitedWriter{w: &stdout, limit: MaxOutputSize}
+	runCmd.Stderr = &limitedWriter{w: &stderr, limit: MaxOutputSize}
 
 	exitCode := 0
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-			slog.Warn("execution failed", "exit_code", exitCode, "stderr_preview", truncate(stderr.String(), 200))
-		} else if ctx.Err() == context.DeadlineExceeded {
+	if err := runCmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
 			exitCode = 124
 			stderr.WriteString("\nExecution timed out (10s limit)")
 			slog.Warn("execution timed out")
+		} else if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+			slog.Warn("execution failed", "exit_code", exitCode, "stderr_preview", truncate(stderr.String(), 200))
 		} else {
 			exitCode = 1
 			slog.Error("execution error", "error", err.Error())
@@ -66,7 +84,7 @@ func (e *Executor) Run(code, stdin string) (*Result, error) {
 
 	return &Result{
 		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		Stderr:   compileStderr.String() + stderr.String(),
 		ExitCode: exitCode,
 	}, nil
 }
